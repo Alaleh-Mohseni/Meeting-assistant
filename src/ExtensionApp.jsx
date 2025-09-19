@@ -82,7 +82,6 @@ const ExtensionApp = () => {
 
     try {
       if (isConnected) {
-        // استفاده از AI برای خلاصه‌سازی
         const response = await fetch(
           "http://localhost:5173/api/generate-summary",
           {
@@ -323,7 +322,6 @@ ${transcripts
   );
 };
 
-// رندر کردن کامپوننت
 const root = document.getElementById("root");
 if (root) {
   render(<ExtensionApp />, root);

@@ -16,11 +16,14 @@ if (window.meetingRecorderInstance) {
             this.mediaRecorder = null;
             this.audioChunks = [];
             this.recognition = null;
-            this.speakerNames = ['شخص ۱', 'شخص ۲'];
+            this.speakerNames = []; // حذف افراد پیش‌فرض
             this.currentSpeaker = 0;
             this.recordingInterval = null;
             this.uiInjected = false;
             this.isProcessing = false;
+            this.currentTranscript = ''; // برای ذخیره متن جاری
+            this.meetingParticipants = new Set();
+            this.isMinimized = false; // اضافه کردن state برای minimize
 
             // ذخیره instance در window
             window.meetingRecorderInstance = this;
@@ -36,6 +39,7 @@ if (window.meetingRecorderInstance) {
 
             this.setupSpeechRecognition();
             this.tryInjectUI();
+            this.detectMeetingParticipants();
 
             // listener برای تغییرات DOM با محدودیت
             this.setupDOMObserver();
@@ -66,12 +70,91 @@ if (window.meetingRecorderInstance) {
                         this.tryInjectUI();
                     }, 1000);
                 }
+
+                // تشخیص تغییر شرکت‌کنندگان
+                this.detectMeetingParticipants();
             });
 
             this.domObserver.observe(document.body, {
                 childList: true,
                 subtree: true
             });
+        }
+
+        // تشخیص شرکت‌کنندگان جلسه
+        detectMeetingParticipants() {
+            const participantSelectors = [
+                '[data-self-name]', // خود کاربر
+                '[data-participant-id]', // شرکت‌کنندگان
+                '.zWGUib', // نام شرکت‌کنندگان
+                '[jsname="xvfV4b"]', // عنصر نام
+                '.GvcuGb .zWGUib', // نام در participant grid
+                '.PnqAKd .zWGUib', // نام در sidebar
+                '.JcaAbe .zWGUib', // نام در لیست
+                '[data-participant-name]', // نام‌های شرکت‌کنندگان
+                '.uGOf1d', // نام‌های participant در grid
+                '[data-initial-value]' // المان‌های نام
+            ];
+
+            let foundParticipants = new Set();
+
+            // تشخیص افراد از DOM elements
+            participantSelectors.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(el => {
+                    let name = el.textContent?.trim();
+
+                    // تمیز کردن نام
+                    if (name && name !== '' && !name.includes('...') && name.length > 1) {
+                        // حذف اطلاعات اضافی
+                        name = name.replace(/\(.*?\)/g, '').trim(); // حذف متن داخل پرانتز
+                        name = name.split('\n')[0].trim(); // اولین خط
+
+                        if (name && name.length > 1 && name.length < 50) {
+                            foundParticipants.add(name);
+                        }
+                    }
+                });
+            });
+
+            // تشخیص از URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const authUser = urlParams.get('authuser');
+            if (authUser) {
+                // ممکن است نام کاربر در URL باشد
+            }
+
+            // محدود کردن تعداد شرکت‌کنندگان به تعداد واقعی visible participants
+            const visibleParticipants = document.querySelectorAll('[data-participant-id], [data-self-name]');
+            const realParticipantCount = Math.max(1, visibleParticipants.length);
+
+            // فیلتر کردن و محدود کردن تعداد
+            const participantArray = [...foundParticipants].slice(0, realParticipantCount);
+
+            // به‌روزرسانی لیست شرکت‌کنندگان
+            if (participantArray.length > 0) {
+                const newParticipants = participantArray.filter(p => !this.meetingParticipants.has(p));
+
+                if (newParticipants.length > 0) {
+                    // پاک کردن لیست قبلی و اضافه کردن جدید
+                    this.meetingParticipants.clear();
+                    this.speakerNames = [];
+
+                    participantArray.forEach(name => {
+                        this.meetingParticipants.add(name);
+                        this.speakerNames.push(name);
+                    });
+
+                    // اگر هیچ شرکت‌کننده‌ای پیدا نشد، یک نام پیش‌فرض اضافه کن
+                    if (this.speakerNames.length === 0) {
+                        this.speakerNames.push('شرکت‌کننده');
+                    }
+
+                    console.log('Participants detected:', this.speakerNames);
+                    this.updateSpeakerButtons();
+                    this.updateStatus(`شرکت‌کنندگان: ${this.speakerNames.length} نفر`);
+                }
+            }
         }
 
         setupSpeechRecognition() {
@@ -82,23 +165,48 @@ if (window.meetingRecorderInstance) {
                 this.recognition.interimResults = true;
                 this.recognition.lang = 'fa-IR';
 
+                let finalTranscriptBuffer = '';
+                let interimTranscriptBuffer = '';
+
                 this.recognition.onresult = (event) => {
+                    let interimTranscript = '';
                     let finalTranscript = '';
+
                     for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+
                         if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i][0].transcript;
+                            finalTranscript += transcript;
+                        } else {
+                            interimTranscript += transcript;
                         }
                     }
 
-                    if (finalTranscript && !this.isProcessing) {
-                        this.handleTranscript(finalTranscript);
+                    // ترکیب متن نهایی
+                    if (finalTranscript) {
+                        finalTranscriptBuffer += finalTranscript;
+
+                        // اگر متن کامل شده (حداقل یک جمله)
+                        if (finalTranscriptBuffer.length > 10 && !this.isProcessing) {
+                            this.handleTranscript(finalTranscriptBuffer.trim());
+                            finalTranscriptBuffer = '';
+                        }
                     }
+
+                    // نمایش متن موقتی
+                    this.updateStatus(
+                        interimTranscript ?
+                            `در حال تشخیص: "${interimTranscript}..."` :
+                            (this.isRecording ? 'در حال ضبط...' : 'آماده'),
+                        'info'
+                    );
                 };
 
                 this.recognition.onerror = (event) => {
                     console.error('Speech recognition error:', event.error);
-                    // تلاش مجدد در صورت خطا
-                    if (this.isRecording && event.error !== 'not-allowed') {
+
+                    // تلاش مجدد در صورت خطاهای غیر بحرانی
+                    if (this.isRecording && !['not-allowed', 'service-not-allowed'].includes(event.error)) {
                         setTimeout(() => {
                             if (this.isRecording && this.recognition) {
                                 try {
@@ -112,7 +220,12 @@ if (window.meetingRecorderInstance) {
                 };
 
                 this.recognition.onend = () => {
-                    console.log('Speech recognition ended');
+                    // ذخیره متن باقی‌مانده در buffer
+                    if (finalTranscriptBuffer.trim() && !this.isProcessing) {
+                        this.handleTranscript(finalTranscriptBuffer.trim());
+                        finalTranscriptBuffer = '';
+                    }
+
                     // اگر هنوز در حال ضبط است، دوباره شروع کن
                     if (this.isRecording) {
                         setTimeout(() => {
@@ -153,36 +266,10 @@ if (window.meetingRecorderInstance) {
             }
 
             console.log('Attempting to inject UI...');
-
-            // جستجوی سلکتورهای مختلف برای toolbar
-            const selectors = [
-                '[role="toolbar"]',
-                '[data-call-controls-bar]',
-                '.VfPpkd-LgbsSe.VfPpkd-LgbsSe-OWXEXe-k8QpJ',
-                '[data-floating-menu-container]',
-                '.FWdGkb',
-                '[jscontroller="soHxf"]',
-                '[jscontroller="UxhHr"]'
-            ];
-
-            let injected = false;
-            for (const selector of selectors) {
-                const toolbar = document.querySelector(selector);
-                if (toolbar && !injected) {
-                    console.log(`Found toolbar with selector: ${selector}`);
-                    this.injectUI();
-                    injected = true;
-                    break;
-                }
-            }
-
-            if (!injected) {
-                console.log('No suitable toolbar found, injecting to body');
-                this.injectUI();
-            }
+            this.injectUI();
         }
 
-        injectUI(targetElement = null) {
+        injectUI() {
             if (this.uiInjected) {
                 return;
             }
@@ -191,14 +278,7 @@ if (window.meetingRecorderInstance) {
             this.cleanupPreviousInstances();
 
             const container = this.createUIContainer();
-
-            // انتخاب مکان مناسب برای قرار دادن UI
-            if (targetElement && targetElement.appendChild) {
-                targetElement.appendChild(container);
-            } else {
-                // قرار دادن در body با position fixed
-                document.body.appendChild(container);
-            }
+            document.body.appendChild(container);
 
             this.uiInjected = true;
             console.log('UI injected successfully');
@@ -210,91 +290,222 @@ if (window.meetingRecorderInstance) {
         createUIContainer() {
             const container = document.createElement('div');
             container.id = 'meeting-assistant-container';
+
+            // اضافه کردن فونت مخصوص فارسی
+            const fontLink = document.createElement('link');
+            fontLink.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap';
+            fontLink.rel = 'stylesheet';
+            document.head.appendChild(fontLink);
+
             container.style.cssText = `
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                background: white;
-                border-radius: 12px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-                padding: 16px;
+                background: oklch(21% .034 264.665);
+                backdrop-filter: blur(20px);
+                border-radius: 20px;
+                padding: 24px;
                 z-index: 10000;
-                max-width: 320px;
-                min-width: 300px;
+                max-width: 380px;
+                min-width: 320px;
                 direction: rtl;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                border: 1px solid #e0e0e0;
+                font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                animation: slideIn 0.5s ease-out;
             `;
 
+            // اضافه کردن CSS animations
+            if (!document.getElementById('meeting-assistant-styles')) {
+                const style = document.createElement('style');
+                style.id = 'meeting-assistant-styles';
+                style.textContent = `
+                    @keyframes slideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    
+                    @keyframes pulse {
+                        0%, 100% { transform: scale(1); }
+                        50% { transform: scale(1.05); }
+                    }
+                    
+                    .recording-pulse {
+                        animation: pulse 2s infinite;
+                    }
+                    
+                    .glass-button {
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .glass-button:hover {
+                        background: rgba(255, 255, 255, 0.2);
+                        transform: translateY(-2px);
+                        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
             container.innerHTML = `
-                <div style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h3 style="margin: 0; font-size: 16px; color: #333;">دستیار جلسه</h3>
-                        <button id="minimize-btn" style="
-                            background: none;
-                            border: none;
-                            font-size: 16px;
-                            cursor: pointer;
-                            color: #666;
-                            padding: 0;
-                            width: 20px;
-                            height: 20px;
-                        ">−</button>
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 22px; font-weight: 700; background: linear-gradient(45deg, #fff, #e0e7ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                                🎙️ دستیار جلسه
+                            </h3>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="minimize-btn" class="glass-button" style="
+                                background: rgba(255, 255, 255, 0.1);
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                border-radius: 12px;
+                                font-size: 18px;
+                                cursor: pointer;
+                                color: white;
+                                padding: 8px 12px;
+                                width: 40px;
+                                height: 40px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            ">−</button>
+                            <button id="close-btn" class="glass-button" style="
+                                background: rgba(239, 68, 68, 0.2);
+                                border: 1px solid rgba(239, 68, 68, 0.3);
+                                border-radius: 12px;
+                                font-size: 18px;
+                                cursor: pointer;
+                                color: #ef4444;
+                                padding: 8px 12px;
+                                width: 40px;
+                                height: 40px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            ">×</button>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                        <button id="record-btn" style="
+                    
+                    <div style="display: flex; gap: 12px; margin-bottom: 16px;" id="main-controls">
+                        <button id="record-btn" class="glass-button" style="
                             flex: 1;
-                            padding: 8px 16px;
+                            padding: 12px 20px;
                             border: none;
-                            border-radius: 8px;
-                            background: #4CAF50;
+                            border-radius: 16px;
+                            background: linear-gradient(45deg, #10b981, #059669);
                             color: white;
                             cursor: pointer;
                             font-size: 14px;
-                            transition: background 0.2s;
-                        ">شروع ضبط</button>
-                        <button id="export-btn" style="
-                            padding: 8px 12px;
+                            font-weight: 600;
+                            font-family: 'Vazirmatn', sans-serif;
+                        ">🎤 شروع ضبط</button>
+                        
+                        <button id="export-btn" class="glass-button" style="
+                            padding: 12px 16px;
                             border: none;
-                            border-radius: 8px;
-                            background: #2196F3;
+                            border-radius: 16px;
+                            background: linear-gradient(45deg, #3b82f6, #1d4ed8);
                             color: white;
                             cursor: pointer;
                             font-size: 14px;
-                        ">دانلود</button>
+                            font-weight: 600;
+                            font-family: 'Vazirmatn', sans-serif;
+                        ">📥 دانلود</button>
                     </div>
                 </div>
                 
-                <div style="margin-bottom: 12px;" id="speaker-section">
-                    <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">گوینده فعال:</label>
-                    <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px;" id="speaker-buttons"></div>
-                    <div style="display: flex; gap: 4px;">
-                        <input type="text" id="new-speaker" placeholder="نام جدید" style="
-                            flex: 1;
-                            padding: 6px 8px;
-                            border: 1px solid #ddd;
-                            border-radius: 4px;
+                <div style="margin-bottom: 20px;" id="speaker-section">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                        <span style="font-size: 14px; font-weight: 500;">👥 شرکت‌کنندگان:</span>
+                        <span id="participant-count" style="
+                            background: rgba(255, 255, 255, 0.2);
+                            padding: 2px 8px;
+                            border-radius: 12px;
                             font-size: 12px;
+                        ">${Math.max(1, this.speakerNames.length)} نفر</span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;" id="speaker-buttons"></div>
+                    
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="new-speaker" placeholder="نام شرکت‌کننده جدید" style="
+                            flex: 1;
+                            padding: 10px 12px;
+                            border: 1px solid rgba(255, 255, 255, 0.3);
+                            border-radius: 12px;
+                            font-size: 13px;
+                            font-family: 'Vazirmatn', sans-serif;
+                            background: rgba(255, 255, 255, 0.1);
+                            backdrop-filter: blur(10px);
+                            color: white;
+                            outline: none;
                         ">
-                        <button id="add-speaker" style="
-                            padding: 6px 12px;
+                        <button id="add-speaker" class="glass-button" style="
+                            padding: 10px 16px;
                             border: none;
-                            border-radius: 4px;
-                            background: #FF9800;
+                            border-radius: 12px;
+                            background: linear-gradient(45deg, #f59e0b, #d97706);
                             color: white;
                             cursor: pointer;
-                            font-size: 12px;
-                        ">افزودن</button>
+                            font-size: 13px;
+                            font-weight: 600;
+                            font-family: 'Vazirmatn', sans-serif;
+                        ">➕ افزودن</button>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 12px;">
+                        <span style="font-size: 13px; opacity: 0.9;">
+                            گوینده فعال:
+                            <span id="current-speaker-name" style="
+                                font-weight: 600;
+                                background: linear-gradient(45deg, #fbbf24, #f59e0b);
+                                -webkit-background-clip: text;
+                                -webkit-text-fill-color: transparent;
+                                background-clip: text;
+                            ">${this.speakerNames.length > 0 ? this.speakerNames[this.currentSpeaker] : 'شرکت‌کننده'}</span>
+                        </span>
                     </div>
                 </div>
                 
-                <div>
-                    <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">
-                        وضعیت: <span id="status" style="font-weight: bold;">آماده</span>
-                    </label>
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888;">
-                        <span>تعداد متن: <span id="transcript-count">0</span></span>
-                        <span id="connection-status">بررسی اتصال...</span>
+                <div style="
+                    background: rgba(255, 255, 255, 0.1);
+                    backdrop-filter: blur(10px);
+                    border-radius: 16px;
+                    padding: 16px;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                " id="status-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span style="font-size: 14px; font-weight: 500;">📊 وضعیت:</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div id="connection-indicator" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></div>
+                            <span id="connection-status" style="font-size: 12px;">بررسی اتصال...</span>
+                        </div>
+                    </div>
+                    
+                    <div id="status-text" style="
+                        font-size: 13px;
+                        font-weight: 500;
+                        margin-bottom: 12px;
+                        padding: 8px 12px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 10px;
+                        text-align: center;
+                    ">آماده برای ضبط</div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: 700; color: #60a5fa;" id="transcript-count">0</div>
+                            <div style="opacity: 0.8;">پیام ضبط شده</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: 700; color: #34d399;" id="question-count">0</div>
+                            <div style="opacity: 0.8;">سوال شناسایی شده</div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -312,29 +523,80 @@ if (window.meetingRecorderInstance) {
             const addSpeakerBtn = container.querySelector('#add-speaker');
             const newSpeakerInput = container.querySelector('#new-speaker');
             const minimizeBtn = container.querySelector('#minimize-btn');
+            const closeBtn = container.querySelector('#close-btn');
 
             recordBtn.addEventListener('click', () => this.toggleRecording());
             exportBtn.addEventListener('click', () => this.exportTranscripts());
             addSpeakerBtn.addEventListener('click', () => this.addSpeaker());
             minimizeBtn.addEventListener('click', () => this.toggleMinimize());
+            closeBtn.addEventListener('click', () => this.closeAssistant());
 
             newSpeakerInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     this.addSpeaker();
                 }
             });
+
+            // اضافه کردن placeholder style
+            newSpeakerInput.addEventListener('focus', () => {
+                newSpeakerInput.style.background = 'rgba(255, 255, 255, 0.2)';
+            });
+
+            newSpeakerInput.addEventListener('blur', () => {
+                newSpeakerInput.style.background = 'rgba(255, 255, 255, 0.1)';
+            });
+        }
+
+        closeAssistant() {
+            // توقف ضبط در صورت فعال بودن
+            if (this.isRecording) {
+                this.stopRecording();
+            }
+
+            // حذف UI
+            const container = document.getElementById('meeting-assistant-container');
+            if (container) {
+                container.style.animation = 'slideOut 0.3s ease-in forwards';
+
+                // اضافه کردن انیمیشن خروج
+                const style = document.getElementById('meeting-assistant-styles');
+                if (style && !style.textContent.includes('slideOut')) {
+                    style.textContent += `
+                        @keyframes slideOut {
+                            from { transform: translateX(0); opacity: 1; }
+                            to { transform: translateX(100%); opacity: 0; }
+                        }
+                    `;
+                }
+
+                setTimeout(() => {
+                    this.destroy();
+                }, 300);
+            }
         }
 
         toggleMinimize() {
             const speakerSection = document.getElementById('speaker-section');
+            const statusSection = document.getElementById('status-section'); // اضافه کردن status section
             const minimizeBtn = document.getElementById('minimize-btn');
+            const container = document.getElementById('meeting-assistant-container');
 
-            if (speakerSection.style.display === 'none') {
+            if (this.isMinimized) {
+                // باز کردن
                 speakerSection.style.display = 'block';
+                statusSection.style.display = 'block'; // نمایش status section
                 minimizeBtn.textContent = '−';
+                container.style.maxHeight = 'none';
+                container.style.minWidth = '320px';
+                this.isMinimized = false;
             } else {
+                // بستن
                 speakerSection.style.display = 'none';
+                statusSection.style.display = 'none'; // مخفی کردن status section
                 minimizeBtn.textContent = '+';
+                container.style.maxHeight = 'auto';
+                container.style.minWidth = '280px';
+                this.isMinimized = true;
             }
         }
 
@@ -342,39 +604,60 @@ if (window.meetingRecorderInstance) {
             try {
                 const response = await fetch('http://localhost:5173/api/health');
                 const isConnected = response.ok;
+
+                const indicator = document.getElementById('connection-indicator');
                 const statusEl = document.getElementById('connection-status');
-                if (statusEl) {
-                    statusEl.textContent = isConnected ? 'متصل به سرور' : 'حالت محلی';
-                    statusEl.style.color = isConnected ? '#4CAF50' : '#FF9800';
+
+                if (indicator && statusEl) {
+                    if (isConnected) {
+                        indicator.style.background = '#10b981';
+                        statusEl.textContent = 'متصل به سرور';
+                    } else {
+                        indicator.style.background = '#f59e0b';
+                        statusEl.textContent = 'حالت محلی';
+                    }
                 }
             } catch (error) {
+                const indicator = document.getElementById('connection-indicator');
                 const statusEl = document.getElementById('connection-status');
-                if (statusEl) {
-                    statusEl.textContent = 'حالت محلی';
-                    statusEl.style.color = '#FF9800';
+
+                if (indicator && statusEl) {
+                    indicator.style.background = '#ef4444';
+                    statusEl.textContent = 'عدم اتصال';
                 }
             }
         }
 
         updateSpeakerButtons() {
             const container = document.getElementById('speaker-buttons');
+            const currentSpeakerName = document.getElementById('current-speaker-name');
+            const participantCount = document.getElementById('participant-count');
+
             if (!container) return;
 
             container.innerHTML = '';
 
+            // اگر شرکت‌کننده‌ای وجود ندارد، یکی اضافه کن
+            if (this.speakerNames.length === 0) {
+                this.speakerNames.push('شرکت‌کننده');
+            }
+
             this.speakerNames.forEach((name, index) => {
                 const btn = document.createElement('button');
                 btn.textContent = name;
+                btn.className = 'glass-button';
                 btn.style.cssText = `
-                    padding: 4px 8px;
+                    padding: 6px 12px;
                     border: none;
-                    border-radius: 4px;
-                    font-size: 11px;
+                    border-radius: 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    font-family: 'Vazirmatn', sans-serif;
                     cursor: pointer;
-                    transition: all 0.2s;
+                    transition: all 0.3s ease;
                     ${index === this.currentSpeaker ?
-                        'background: #673AB7; color: white;' :
-                        'background: #f0f0f0; color: #333;'
+                        'background: linear-gradient(45deg, #8b5cf6, #7c3aed); color: white; box-shadow: 0 6px 12px rgba(139, 92, 246, 0.4);' :
+                        'background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.8); border: 1px solid rgba(255, 255, 255, 0.2);'
                     }
                 `;
 
@@ -386,6 +669,16 @@ if (window.meetingRecorderInstance) {
 
                 container.appendChild(btn);
             });
+
+            // به‌روزرسانی نام گوینده فعال
+            if (currentSpeakerName) {
+                currentSpeakerName.textContent = this.speakerNames[this.currentSpeaker] || 'شرکت‌کننده';
+            }
+
+            // به‌روزرسانی تعداد شرکت‌کنندگان
+            if (participantCount) {
+                participantCount.textContent = `${this.speakerNames.length} نفر`;
+            }
         }
 
         addSpeaker() {
@@ -398,16 +691,23 @@ if (window.meetingRecorderInstance) {
                 this.speakerNames.push(name);
                 input.value = '';
                 this.updateSpeakerButtons();
+                this.updateStatus(`شرکت‌کننده جدید افزوده شد: ${name}`, 'success');
                 console.log(`Speaker added: ${name}`);
             }
         }
 
         updateStatus(text, type = 'info') {
-            const statusEl = document.getElementById('status');
+            const statusEl = document.getElementById('status-text');
             if (statusEl) {
                 statusEl.textContent = text;
-                statusEl.style.color = type === 'error' ? '#f44336' :
-                    type === 'success' ? '#4CAF50' : '#333';
+
+                // تغییر رنگ بر اساس نوع
+                let bgColor = 'rgba(255, 255, 255, 0.1)';
+                if (type === 'error') bgColor = 'rgba(239, 68, 68, 0.2)';
+                else if (type === 'success') bgColor = 'rgba(16, 185, 129, 0.2)';
+                else if (type === 'recording') bgColor = 'rgba(245, 158, 11, 0.2)';
+
+                statusEl.style.background = bgColor;
             }
             console.log(`Status: ${text}`);
         }
@@ -416,11 +716,14 @@ if (window.meetingRecorderInstance) {
             if (typeof chrome === 'undefined' || !chrome.storage) return;
 
             chrome.storage.local.get(['transcripts'], (result) => {
-                const count = result.transcripts ? result.transcripts.length : 0;
+                const transcripts = result.transcripts || [];
+                const questions = transcripts.filter(t => t.isQuestion);
+
                 const countEl = document.getElementById('transcript-count');
-                if (countEl) {
-                    countEl.textContent = count;
-                }
+                const questionEl = document.getElementById('question-count');
+
+                if (countEl) countEl.textContent = transcripts.length;
+                if (questionEl) questionEl.textContent = questions.length;
             });
         }
 
@@ -434,18 +737,19 @@ if (window.meetingRecorderInstance) {
 
         async startRecording() {
             try {
-                this.updateStatus('درخواست مجوز میکروفون...');
+                this.updateStatus('درخواست مجوز میکروفون...', 'info');
 
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
-                        sampleRate: 16000  // کاهش sample rate برای بهبود عملکرد
+                        sampleRate: 44100  // افزایش کیفیت صدا
                     }
                 });
 
                 this.mediaRecorder = new MediaRecorder(stream, {
-                    mimeType: 'audio/webm;codecs=opus'
+                    mimeType: 'audio/webm;codecs=opus',
+                    audioBitsPerSecond: 128000  // افزایش کیفیت
                 });
                 this.audioChunks = [];
 
@@ -459,17 +763,12 @@ if (window.meetingRecorderInstance) {
                     if (this.audioChunks.length > 0) {
                         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
                         this.processAudio(audioBlob);
+                        this.audioChunks = []; // پاک کردن chunks
                     }
                 };
 
-                // ضبط هر 15 ثانیه برای بهبود عملکرد
+                // ضبط بدون وقفه - حذف interval برای جلوگیری از قطع شدن
                 this.mediaRecorder.start();
-                this.recordingInterval = setInterval(() => {
-                    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-                        this.mediaRecorder.stop();
-                        this.mediaRecorder.start();
-                    }
-                }, 15000);
 
                 // شروع Speech Recognition
                 if (this.recognition) {
@@ -482,7 +781,7 @@ if (window.meetingRecorderInstance) {
 
                 this.isRecording = true;
                 this.updateRecordButton();
-                this.updateStatus('در حال ضبط...', 'success');
+                this.updateStatus('در حال ضبط...', 'recording');
 
                 console.log('Recording started successfully');
             } catch (error) {
@@ -531,20 +830,36 @@ if (window.meetingRecorderInstance) {
 
         updateRecordButton() {
             const btn = document.getElementById('record-btn');
+            const container = document.getElementById('meeting-assistant-container');
+
             if (btn) {
-                btn.textContent = this.isRecording ? 'توقف ضبط' : 'شروع ضبط';
-                btn.style.background = this.isRecording ? '#f44336' : '#4CAF50';
+                btn.innerHTML = this.isRecording ? '🛑 توقف ضبط' : '🎤 شروع ضبط';
+                btn.style.background = this.isRecording ?
+                    'linear-gradient(45deg, #ef4444, #dc2626)' :
+                    'linear-gradient(45deg, #10b981, #059669)';
+                btn.style.boxShadow = this.isRecording ?
+                    '0 8px 16px rgba(239, 68, 68, 0.3)' :
+                    '0 8px 16px rgba(16, 185, 129, 0.3)';
+            }
+
+            // اضافه کردن انیمیشن pulse هنگام ضبط
+            if (container) {
+                if (this.isRecording) {
+                    container.classList.add('recording-pulse');
+                } else {
+                    container.classList.remove('recording-pulse');
+                }
             }
         }
 
         handleTranscript(transcript) {
-            if (this.isProcessing) return;
+            if (this.isProcessing || !transcript.trim()) return;
 
             this.isProcessing = true;
 
             const entry = {
                 text: transcript.trim(),
-                speaker: this.speakerNames[this.currentSpeaker],
+                speaker: this.speakerNames[this.currentSpeaker] || 'شرکت‌کننده',
                 timestamp: new Date().toISOString(),
                 isQuestion: transcript.includes('؟') ||
                     /\b(چی|چه|کی|کجا|چرا|چطور|آیا)\b/.test(transcript)
@@ -559,8 +874,16 @@ if (window.meetingRecorderInstance) {
                         if (chrome.runtime.lastError) {
                             console.error('Storage error:', chrome.runtime.lastError);
                         } else {
-                            console.log('Transcript saved:', transcript);
+                            console.log('Transcript saved:', transcript.substring(0, 50) + '...');
                             this.updateTranscriptCount();
+                            this.updateStatus('متن ذخیره شد ✓', 'success');
+
+                            // بازگشت به وضعیت ضبط بعد از 2 ثانیه
+                            setTimeout(() => {
+                                if (this.isRecording) {
+                                    this.updateStatus('در حال ضبط...', 'recording');
+                                }
+                            }, 2000);
                         }
                         this.isProcessing = false;
                     });
@@ -578,7 +901,7 @@ if (window.meetingRecorderInstance) {
             }
 
             try {
-                this.updateStatus('پردازش صوت...');
+                this.updateStatus('پردازش صوت توسط AI...', 'info');
 
                 const arrayBuffer = await audioBlob.arrayBuffer();
                 const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
@@ -597,10 +920,18 @@ if (window.meetingRecorderInstance) {
                     if (response && response.success) {
                         console.log('Audio processed successfully', response.data);
                         this.handleServerTranscription(response.data);
+                        this.updateStatus('متن از AI دریافت شد ✓', 'success');
+
+                        // بازگشت به وضعیت ضبط بعد از 3 ثانیه
+                        setTimeout(() => {
+                            if (this.isRecording) {
+                                this.updateStatus('در حال ضبط...', 'recording');
+                            }
+                        }, 3000);
                     } else {
                         console.error('Audio processing failed:', response?.error);
+                        this.updateStatus('خطا در پردازش AI', 'error');
                     }
-                    this.updateStatus(this.isRecording ? 'در حال ضبط...' : 'آماده');
                 });
             } catch (error) {
                 console.error('Error processing audio:', error);
@@ -625,7 +956,7 @@ if (window.meetingRecorderInstance) {
                     const speakerIndex = Math.max(0, Math.min(item.speakerTag - 1, this.speakerNames.length - 1));
                     const entry = {
                         text: item.transcript.trim(),
-                        speaker: this.speakerNames[speakerIndex],
+                        speaker: this.speakerNames[speakerIndex] || 'شرکت‌کننده',
                         timestamp: new Date().toISOString(),
                         confidence: data.confidence,
                         isQuestion: item.transcript.includes('؟') ||
@@ -660,22 +991,27 @@ if (window.meetingRecorderInstance) {
                 }
 
                 const content = `متن جلسه Google Meet
+============================
 تاریخ: ${new Date().toLocaleDateString('fa-IR')}
 زمان: ${new Date().toLocaleTimeString('fa-IR')}
 تعداد پیام‌ها: ${transcripts.length}
 شرکت‌کنندگان: ${this.speakerNames.join(', ')}
 
-${'='.repeat(50)}
+============================
 
-${transcripts.map((t, i) =>
-                    `${i + 1}. ${t.speaker} - ${new Date(t.timestamp).toLocaleTimeString('fa-IR')}
+${transcripts.map((t, i) => {
+                    const time = new Date(t.timestamp).toLocaleTimeString('fa-IR');
+                    const confidence = t.confidence ? ` (اعتماد: ${Math.round(t.confidence * 100)}%)` : '';
+                    const question = t.isQuestion ? ' 💭' : '';
+
+                    return `${i + 1}. [${time}] ${t.speaker}${confidence}${question}
    ${t.text}
-   ${t.isQuestion ? '   💭 (سوال)' : ''}
-   ${t.confidence ? `   اعتماد: ${Math.round(t.confidence * 100)}%` : ''}
-`).join('\n')}
+`;
+                }).join('\n')}
 
-${'='.repeat(50)}
-تولید شده توسط دستیار جلسات - ${new Date().toLocaleString('fa-IR')}`;
+============================
+تولید شده توسط دستیار جلسات
+${new Date().toLocaleString('fa-IR')}`;
 
                 const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
@@ -685,6 +1021,7 @@ ${'='.repeat(50)}
                 a.click();
                 URL.revokeObjectURL(url);
 
+                this.updateStatus('فایل دانلود شد ✓', 'success');
                 console.log('Transcripts exported successfully');
             });
         }
@@ -704,6 +1041,12 @@ ${'='.repeat(50)}
             const container = document.getElementById('meeting-assistant-container');
             if (container) {
                 container.remove();
+            }
+
+            // پاک کردن styles
+            const styles = document.getElementById('meeting-assistant-styles');
+            if (styles) {
+                styles.remove();
             }
 
             this.uiInjected = false;

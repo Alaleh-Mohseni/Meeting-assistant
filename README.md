@@ -2,6 +2,14 @@
 
 A sophisticated voice-powered meeting assistant that provides real-time transcription, automatic question detection, and AI-generated summaries in Persian (Farsi). Built with Preact, Node.js, and integrated with Google Cloud Speech-to-Text and OpenAI APIs.
 
+### Extension screenshots
+
+<p align="center">
+  <img src="public/images/meeting-assistant1.png" alt="Popup UI" width="280" />
+  &nbsp;&nbsp;
+  <img src="public/images/meeting-assistant2.png" alt="Background page" width="280" />
+</p>
+
 ## 🌟 Features
 
 - **Real-time Voice Transcription**: Live speech-to-text conversion in Persian using Google Cloud Speech-to-Text API
