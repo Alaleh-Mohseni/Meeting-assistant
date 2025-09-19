@@ -1,6 +1,6 @@
 # Persian Meeting Assistant
 
-A sophisticated voice-powered meeting assistant that provides real-time transcription, automatic question detection, and AI-generated summaries in Persian (Farsi). Built with React, Node.js, and integrated with Google Cloud Speech-to-Text and OpenAI APIs.
+A sophisticated voice-powered meeting assistant that provides real-time transcription, automatic question detection, and AI-generated summaries in Persian (Farsi). Built with Preact, Node.js, and integrated with Google Cloud Speech-to-Text and OpenAI APIs.
 
 ## 🌟 Features
 
@@ -12,7 +12,8 @@ A sophisticated voice-powered meeting assistant that provides real-time transcri
 - **Export Functionality**: Download meeting transcripts and summaries
 - **Offline Fallback**: Works with browser-based speech recognition when server is unavailable
 - **Real-time Processing**: Continuous audio processing with 30-second chunks
-- **Browser Extension Ready**: Can be packaged as a browser extension
+- **Browser Extension**: Fully functional as a Chrome/Firefox browser extension
+- **Dual Mode Support**: Works as both standalone web app and browser extension
 
 ## 🏗️ Architecture
 
@@ -26,7 +27,8 @@ A sophisticated voice-powered meeting assistant that provides real-time transcri
 
 ### Frontend Components
 
-- **React**: Modern UI with hooks for state management
+- **Preact**: Lightweight React alternative (3KB) with full React compatibility
+- **React Hooks Support**: Complete hooks compatibility via preact/compat
 - **Lucide Icons**: Clean and consistent iconography
 - **Tailwind CSS**: Responsive and modern styling
 - **Web APIs**: MediaRecorder, SpeechRecognition for browser-based functionality
@@ -93,7 +95,75 @@ The application will be available at `http://localhost:5173`
 docker-compose up -d
 ```
 
+## 🔌 Browser Extension
+
+The application can be packaged and used as a browser extension for Chrome, Firefox, and other Chromium-based browsers.
+
+### Building the Extension
+
+1. **Build the extension files**:
+
+```bash
+npm run build:extension
+```
+
+2. **Package the extension**:
+
+```bash
+npm run pack:extension
+```
+
+This creates `meeting-assistant-extension.zip` in `dist/extension/` directory.
+
+### Installing the Extension
+
+#### Chrome/Chromium Browsers:
+
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable "Developer mode" (toggle in top right)
+3. Click "Load unpacked"
+4. Select the `dist/extension` folder (or extract and select the zip contents)
+5. The extension icon will appear in your browser toolbar
+
+#### Firefox:
+
+1. Go to `about:debugging`
+2. Click "This Firefox"
+3. Click "Load Temporary Add-on"
+4. Select any file from the `dist/extension` folder
+
+### Extension Features
+
+- **Popup Interface**: Clean, responsive UI optimized for browser extension popup
+- **Background Processing**: Runs background scripts for continuous functionality
+- **Content Script Integration**: Can interact with web pages when needed
+- **Offline Capable**: Works without constant server connection using browser APIs
+- **Cross-browser Compatible**: Works on Chrome, Firefox, Edge, and other modern browsers
+
+### Extension Files Structure
+
+```
+dist/extension/
+├── manifest.json         # Extension configuration
+├── background.js         # Background script for persistent functionality
+├── content.js           # Content script for web page interaction
+├── popup.html           # Extension popup interface
+├── popup.js             # Popup functionality
+├── assets/              # Compiled CSS and JS
+└── icons/               # Extension icons (16x16, 32x32, 128x128)
+```
+
+### Extension Permissions
+
+The extension requests minimal permissions:
+
+- **Microphone**: For audio recording and transcription
+- **Active Tab**: To interact with the current webpage (optional)
+- **Storage**: To save user preferences and temporary data
+
 ## 📋 Usage
+
+### Web Application Mode
 
 1. **Start Recording**: Click the microphone button to begin recording
 2. **Manage Speakers**: Add, edit, or remove meeting participants
@@ -101,6 +171,15 @@ docker-compose up -d
 4. **Question Detection**: Questions are automatically highlighted
 5. **Generate Summary**: Create AI-powered meeting summaries
 6. **Export Data**: Download transcripts and summaries as text files
+
+### Browser Extension Mode
+
+1. **Click Extension Icon**: Open the meeting assistant popup
+2. **Grant Permissions**: Allow microphone access when prompted
+3. **Start Meeting**: Begin recording directly from the popup
+4. **Minimal Interface**: Streamlined UI optimized for extension usage
+5. **Background Processing**: Meeting continues recording even when popup is closed
+6. **Quick Access**: Instant access from any webpage
 
 ## 🔧 Configuration
 
@@ -125,16 +204,12 @@ The system detects Persian questions using:
 - Question words: چی، چه، کی، کجا، چرا، چطور، آیا
 - Regular expression patterns for Persian interrogatives
 
-## 🌐 Browser Extension
+### Extension-specific Settings
 
-Build the browser extension:
-
-```bash
-npm run build:extension
-npm run pack:extension
-```
-
-This creates a packaged extension in `dist/extension/meeting-assistant-extension.zip`
+- **Popup Size**: 400x600px (optimized for various screen sizes)
+- **Background Persistence**: Service worker for Chrome, background page for Firefox
+- **Storage**: Local storage for user preferences and temporary meeting data
+- **Icon Themes**: Adaptive icons that work with light/dark browser themes
 
 ## 📁 Project Structure
 
@@ -147,10 +222,18 @@ Meeting-assistant/
 │       ├── questions.js      # Question detection logic
 │       └── summary.js        # AI summary generation
 ├── src/
-│   ├── App.jsx              # Main React component
+│   ├── App.jsx              # Main Preact component
 │   ├── App.css              # Component styles
+│   ├── index.html           # Web app HTML template
+│   ├── index-extension.html # Extension popup HTML template
 │   └── server.js            # Express server setup
+├── public/
+│   ├── manifest.json        # Browser extension manifest
+│   ├── background.js        # Extension background script
+│   ├── content.js          # Extension content script
+│   └── icons/              # Extension icons
 ├── docker-compose.yml       # Docker configuration
+├── vite.config.js          # Vite configuration with extension mode
 ├── package.json            # Dependencies and scripts
 ├── .env.example           # Environment variables template
 └── README.md              # Project documentation
@@ -192,6 +275,35 @@ Content-Type: application/json
 }
 ```
 
+## 🛠️ Development
+
+### Available Scripts
+
+- `npm run nodemon` - Start development server with auto-reload
+- `npm run dev` - Start Vite development server
+- `npm run build` - Build for web application production
+- `npm run build:extension` - Build for browser extension
+- `npm run dev:extension` - Development mode with extension build watching
+- `npm run pack:extension` - Build and package extension as ZIP file
+
+### Extension Development
+
+1. **Start development with extension mode**:
+
+```bash
+npm run dev:extension
+```
+
+2. **This will**:
+
+   - Start the backend server
+   - Build extension files with watch mode
+   - Auto-rebuild when source files change
+
+3. **Testing**:
+   - Load the unpacked extension from `dist/extension`
+   - Changes will be reflected after reloading the extension
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -206,12 +318,16 @@ Content-Type: application/json
 - Maintain RTL (Right-to-Left) text direction
 - Test with various Persian accents and dialects
 - Ensure mobile responsiveness
+- Test both web app and extension modes
+- Follow extension store guidelines for submissions
 
 ## 📊 Performance
 
 - **Real-time Processing**: < 2 second latency for transcription
 - **Audio Chunk Size**: 30 seconds for optimal processing
 - **Memory Usage**: Efficient with chunked processing
+- **Bundle Size**: Preact keeps bundle size under 150KB
+- **Extension Performance**: Minimal background resource usage
 - **Offline Capability**: Browser-based fallback when server unavailable
 
 ## 🔐 Security
@@ -220,6 +336,8 @@ Content-Type: application/json
 - Temporary file cleanup after processing
 - API key validation for external services
 - CORS protection for cross-origin requests
+- Extension permissions follow principle of least privilege
+- No sensitive data stored in extension local storage
 
 ## 🐛 Troubleshooting
 
@@ -229,6 +347,7 @@ Content-Type: application/json
 
 - Ensure browser microphone permissions are granted
 - Check HTTPS requirement for audio access
+- In extension: grant microphone permission in popup
 
 **Transcription Not Working**
 
@@ -248,6 +367,42 @@ Content-Type: application/json
 - Check port availability (5173, 24678)
 - Verify volume mounts
 
+**Extension Issues**
+
+- Reload extension after code changes
+- Check browser console for errors
+- Verify manifest.json is valid
+- Ensure all required files are in dist/extension
+
+### Browser-Specific Issues
+
+**Chrome**
+
+- Use Manifest V3 format (already implemented)
+- Service worker background script
+
+**Firefox**
+
+- Background page instead of service worker
+- Different permission handling
+
+## 📱 Platform Support
+
+### Web Application
+
+- ✅ Chrome 80+
+- ✅ Firefox 75+
+- ✅ Safari 14+
+- ✅ Edge 80+
+
+### Browser Extension
+
+- ✅ Chrome/Chromium (Manifest V3)
+- ✅ Firefox (Manifest V2/V3)
+- ✅ Edge
+- ✅ Opera
+- ⚠️ Safari (requires conversion to Safari Web Extension)
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -256,8 +411,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Google Cloud Speech-to-Text for Persian language support
 - OpenAI for advanced summary generation capabilities
-- React and Node.js communities for excellent tooling
+- Preact team for the lightweight React alternative
 - Persian NLP community for language processing insights
+- Browser extension development community
 
 ## 📞 Support
 
