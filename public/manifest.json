@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Meeting Assistant",
+  "version": "1.0.1",
+  "description": "A voice assistant for Google Meet built with Preact.",
+  "action": {
+    "default_popup": "index-extension.html",
+    "default_icon": {
+      "16": "icons/icon.png",
+      "48": "icons/icon.png",
+      "128": "icons/icon.png"
+    }
+  },
+  "permissions": ["storage", "activeTab", "scripting", "alarms"],
+  "host_permissions": ["http://localhost:5173/*", "https://meet.google.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["https://meet.google.com/*"]
+    }
+  ]
+}
