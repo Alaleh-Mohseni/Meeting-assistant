@@ -1,69 +1,3 @@
-// import { Router } from 'express'
-// import fs from 'fs'
-// import multer from 'multer'
-// import speech from '@google-cloud/speech'
-// const router = Router()
-
-// const speechClient = new speech.SpeechClient({
-//     keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
-// });
-
-// const upload = multer({
-//     dest: 'uploads/',
-//     limits: { fileSize: 10 * 1024 * 1024 }
-// });
-
-// router.post('/', upload.single('audio'), async (req, res) => {
-//     try {
-//         if (!req.file) {
-//             return res.status(400).json({ error: 'No audio file provided' });
-//         }
-
-//         const audioBytes = fs.readFileSync(req.file.path).toString('base64');
-
-//         const request = {
-//             audio: {
-//                 content: audioBytes,
-//             },
-//             config: {
-//                 encoding: 'WEBM_OPUS', // or 'MP3', 'WAV' depending on your audio format
-//                 sampleRateHertz: 16000,
-//                 languageCode: 'fa-IR',
-//                 enableSpeakerDiarization: true,
-//                 diarizationSpeakerCount: parseInt(req.body.speakerCount) || 2,
-//                 enableAutomaticPunctuation: true,
-//                 model: 'latest_long',
-//             },
-//         };
-
-//         const [response] = await speechClient.recognize(request);
-//         const transcription = response.results
-//             .map(result => result.alternatives[0])
-//             .map((alternative, index) => {
-//                 const speakerTag = response.results[index].alternatives[0].words?.[0]?.speakerTag || 1;
-//                 return {
-//                     transcript: alternative.transcript,
-//                     confidence: alternative.confidence,
-//                     speakerTag: speakerTag,
-//                     timestamp: new Date().toISOString()
-//                 };
-//             });
-
-//         // Clean up uploaded file
-//         fs.unlinkSync(req.file.path);
-
-//         res.json({ transcription });
-//     } catch (error) {
-//         console.error('Transcription error:', error);
-//         res.status(500).json({ error: 'Transcription failed' });
-//     }
-// });
-
-// export default router
-
-
-
-// backend/apis/transcribe.js
 import { Router } from "express"
 import fs from "fs"
 import speech from "@google-cloud/speech"
@@ -87,7 +21,7 @@ router.post("/", upload.single("audio"), async (req, res) => {
         const request = {
             audio: { content: audioBytes },
             config: {
-                encoding: "WEBM_OPUS", // یا فرمت واقعی فایل (مثلاً LINEAR16)
+                encoding: "WEBM_OPUS",
                 sampleRateHertz: 16000,
                 languageCode: "fa-IR",
                 enableAutomaticPunctuation: true,
@@ -99,7 +33,6 @@ router.post("/", upload.single("audio"), async (req, res) => {
 
         const [response] = await speechClient.recognize(request)
 
-        // استخراج واژه‌ها از نتایج
         const words = []
         for (const r of response.results || []) {
             const alt = r.alternatives?.[0]
@@ -114,7 +47,6 @@ router.post("/", upload.single("audio"), async (req, res) => {
             }
         }
 
-        // گروه‌بندی واژه‌ها بر اساس speakerTag
         const segments = []
         let cur = null
         for (const w of words) {
@@ -133,7 +65,6 @@ router.post("/", upload.single("audio"), async (req, res) => {
         }
         if (cur) segments.push(cur)
 
-        // اطمینان از پاک‌سازی فایل موقت
         fs.unlinkSync(req.file.path)
 
         return res.json({
