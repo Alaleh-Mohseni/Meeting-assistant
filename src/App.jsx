@@ -109,7 +109,6 @@ const App = () => {
       if (response.ok) {
         const data = await response.json();
 
-        // داده‌ی backend: { speakerTag, transcript, startTime, endTime }
         const newEntries = data.transcription.map((item, index) => {
           const speakerIndex = (item.speakerTag - 1) % speakerNames.length;
           return {

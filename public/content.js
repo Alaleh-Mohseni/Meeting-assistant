@@ -1,5 +1,5 @@
-// content.js - اجرا در صفحه Google Meet
-// اضافه کردن کنترل singleton
+// content.js - Executes on the Google Meet page
+// Add singleton control
 if (window.meetingRecorderInstance) {
     console.log('Meeting recorder already initialized');
 } else {
@@ -7,7 +7,7 @@ if (window.meetingRecorderInstance) {
 
     class MeetingRecorder {
         constructor() {
-            // جلوگیری از اجرای مکرر
+            // Prevent multiple executions
             if (window.meetingRecorderInstance) {
                 return window.meetingRecorderInstance;
             }
@@ -16,16 +16,15 @@ if (window.meetingRecorderInstance) {
             this.mediaRecorder = null;
             this.audioChunks = [];
             this.recognition = null;
-            this.speakerNames = []; // حذف افراد پیش‌فرض
+            this.speakerNames = [];
             this.currentSpeaker = 0;
             this.recordingInterval = null;
             this.uiInjected = false;
             this.isProcessing = false;
-            this.currentTranscript = ''; // برای ذخیره متن جاری
+            this.currentTranscript = '';
             this.meetingParticipants = new Set();
-            this.isMinimized = false; // اضافه کردن state برای minimize
+            this.isMinimized = false;
 
-            // ذخیره instance در window
             window.meetingRecorderInstance = this;
 
             this.init();
@@ -34,19 +33,17 @@ if (window.meetingRecorderInstance) {
         init() {
             console.log('Meeting Assistant initialized on Google Meet');
 
-            // پاک کردن UI‌های قبلی
             this.cleanupPreviousInstances();
 
             this.setupSpeechRecognition();
             this.tryInjectUI();
             this.detectMeetingParticipants();
 
-            // listener برای تغییرات DOM با محدودیت
+            // Limited DOM changes listener
             this.setupDOMObserver();
         }
 
         cleanupPreviousInstances() {
-            // حذف UI‌های قبلی
             const existingContainers = document.querySelectorAll('#meeting-assistant-container');
             existingContainers.forEach(container => {
                 console.log('Removing existing UI container');
@@ -56,22 +53,19 @@ if (window.meetingRecorderInstance) {
         }
 
         setupDOMObserver() {
-            // observer با محدودیت برای جلوگیری از اجرای مکرر
             if (this.domObserver) {
                 this.domObserver.disconnect();
             }
 
             this.domObserver = new MutationObserver((mutations) => {
-                // فقط اگر UI inject نشده باشد
                 if (!this.uiInjected) {
-                    // محدود کردن تعداد تلاش‌ها
                     clearTimeout(this.retryTimeout);
                     this.retryTimeout = setTimeout(() => {
                         this.tryInjectUI();
                     }, 1000);
                 }
 
-                // تشخیص تغییر شرکت‌کنندگان
+                // Detect participant change
                 this.detectMeetingParticipants();
             });
 
@@ -81,34 +75,34 @@ if (window.meetingRecorderInstance) {
             });
         }
 
-        // تشخیص شرکت‌کنندگان جلسه
+        // Detect meeting participants
         detectMeetingParticipants() {
             const participantSelectors = [
-                '[data-self-name]', // خود کاربر
-                '[data-participant-id]', // شرکت‌کنندگان
-                '.zWGUib', // نام شرکت‌کنندگان
-                '[jsname="xvfV4b"]', // عنصر نام
-                '.GvcuGb .zWGUib', // نام در participant grid
-                '.PnqAKd .zWGUib', // نام در sidebar
-                '.JcaAbe .zWGUib', // نام در لیست
-                '[data-participant-name]', // نام‌های شرکت‌کنندگان
-                '.uGOf1d', // نام‌های participant در grid
-                '[data-initial-value]' // المان‌های نام
+                '[data-self-name]', // The user themselves
+                '[data-participant-id]', // Participants
+                '.zWGUib', // Participant names
+                '[jsname="xvfV4b"]', // Name element
+                '.GvcuGb .zWGUib', // Name in the participant grid
+                '.PnqAKd .zWGUib', // Name in the sidebar
+                '.JcaAbe .zWGUib', // Name in the list
+                '[data-participant-name]', // Participant names
+                '.uGOf1d', // Participant names in the grid
+                '[data-initial-value]' // Name elements
             ];
 
             let foundParticipants = new Set();
 
-            // تشخیص افراد از DOM elements
+            // Detect individuals from DOM elements
             participantSelectors.forEach(selector => {
                 const elements = document.querySelectorAll(selector);
                 elements.forEach(el => {
                     let name = el.textContent?.trim();
 
-                    // تمیز کردن نام
+                    // Clean up the name
                     if (name && name !== '' && !name.includes('...') && name.length > 1) {
-                        // حذف اطلاعات اضافی
-                        name = name.replace(/\(.*?\)/g, '').trim(); // حذف متن داخل پرانتز
-                        name = name.split('\n')[0].trim(); // اولین خط
+                        // Remove extra information
+                        name = name.replace(/\(.*?\)/g, '').trim(); // Remove text inside parentheses
+                        name = name.split('\n')[0].trim(); // First line
 
                         if (name && name.length > 1 && name.length < 50) {
                             foundParticipants.add(name);
@@ -117,26 +111,26 @@ if (window.meetingRecorderInstance) {
                 });
             });
 
-            // تشخیص از URL parameters
+            // Detect from URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const authUser = urlParams.get('authuser');
             if (authUser) {
-                // ممکن است نام کاربر در URL باشد
+                // The user's name might be in the URL
             }
 
-            // محدود کردن تعداد شرکت‌کنندگان به تعداد واقعی visible participants
+            // Limit the number of participants to the actual number of visible participants
             const visibleParticipants = document.querySelectorAll('[data-participant-id], [data-self-name]');
             const realParticipantCount = Math.max(1, visibleParticipants.length);
 
-            // فیلتر کردن و محدود کردن تعداد
+            // Filter and limit the count
             const participantArray = [...foundParticipants].slice(0, realParticipantCount);
 
-            // به‌روزرسانی لیست شرکت‌کنندگان
+            // Update the list of participants
             if (participantArray.length > 0) {
                 const newParticipants = participantArray.filter(p => !this.meetingParticipants.has(p));
 
                 if (newParticipants.length > 0) {
-                    // پاک کردن لیست قبلی و اضافه کردن جدید
+                    // Clear the previous list and add the new ones
                     this.meetingParticipants.clear();
                     this.speakerNames = [];
 
@@ -145,14 +139,14 @@ if (window.meetingRecorderInstance) {
                         this.speakerNames.push(name);
                     });
 
-                    // اگر هیچ شرکت‌کننده‌ای پیدا نشد، یک نام پیش‌فرض اضافه کن
+                    // If no participants were found, add a default name
                     if (this.speakerNames.length === 0) {
-                        this.speakerNames.push('شرکت‌کننده');
+                        this.speakerNames.push('Participant'); // or 'Attendee'
                     }
 
                     console.log('Participants detected:', this.speakerNames);
                     this.updateSpeakerButtons();
-                    this.updateStatus(`شرکت‌کنندگان: ${this.speakerNames.length} نفر`);
+                    this.updateStatus(`Participants: ${this.speakerNames.length} people`);
                 }
             }
         }
@@ -182,18 +176,15 @@ if (window.meetingRecorderInstance) {
                         }
                     }
 
-                    // ترکیب متن نهایی
                     if (finalTranscript) {
                         finalTranscriptBuffer += finalTranscript;
 
-                        // اگر متن کامل شده (حداقل یک جمله)
                         if (finalTranscriptBuffer.length > 10 && !this.isProcessing) {
                             this.handleTranscript(finalTranscriptBuffer.trim());
                             finalTranscriptBuffer = '';
                         }
                     }
 
-                    // نمایش متن موقتی
                     this.updateStatus(
                         interimTranscript ?
                             `در حال تشخیص: "${interimTranscript}..."` :
@@ -205,7 +196,6 @@ if (window.meetingRecorderInstance) {
                 this.recognition.onerror = (event) => {
                     console.error('Speech recognition error:', event.error);
 
-                    // تلاش مجدد در صورت خطاهای غیر بحرانی
                     if (this.isRecording && !['not-allowed', 'service-not-allowed'].includes(event.error)) {
                         setTimeout(() => {
                             if (this.isRecording && this.recognition) {
@@ -220,13 +210,13 @@ if (window.meetingRecorderInstance) {
                 };
 
                 this.recognition.onend = () => {
-                    // ذخیره متن باقی‌مانده در buffer
+                    // Store remaining text in buffer
                     if (finalTranscriptBuffer.trim() && !this.isProcessing) {
                         this.handleTranscript(finalTranscriptBuffer.trim());
                         finalTranscriptBuffer = '';
                     }
 
-                    // اگر هنوز در حال ضبط است، دوباره شروع کن
+                    // If still recording, restart
                     if (this.isRecording) {
                         setTimeout(() => {
                             if (this.isRecording && this.recognition) {
@@ -250,12 +240,10 @@ if (window.meetingRecorderInstance) {
                 return;
             }
 
-            // چک کردن اینکه آیا در صفحه Meet هستیم
             if (!window.location.hostname.includes('meet.google.com')) {
                 return;
             }
 
-            // چک کردن اینکه آیا در جلسه هستیم
             const meetingElements = document.querySelector('[data-meeting-title]') ||
                 document.querySelector('[data-call-id]') ||
                 document.querySelector('[jscontroller*="meeting"]');
@@ -274,7 +262,6 @@ if (window.meetingRecorderInstance) {
                 return;
             }
 
-            // پاک کردن UI‌های قبلی
             this.cleanupPreviousInstances();
 
             const container = this.createUIContainer();
@@ -283,7 +270,7 @@ if (window.meetingRecorderInstance) {
             this.uiInjected = true;
             console.log('UI injected successfully');
 
-            // به‌روزرسانی تعداد transcript‌ها
+            // Update transcript count
             this.updateTranscriptCount();
         }
 
@@ -291,7 +278,6 @@ if (window.meetingRecorderInstance) {
             const container = document.createElement('div');
             container.id = 'meeting-assistant-container';
 
-            // اضافه کردن فونت مخصوص فارسی
             const fontLink = document.createElement('link');
             fontLink.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap';
             fontLink.rel = 'stylesheet';
@@ -316,7 +302,6 @@ if (window.meetingRecorderInstance) {
                 animation: slideIn 0.5s ease-out;
             `;
 
-            // اضافه کردن CSS animations
             if (!document.getElementById('meeting-assistant-styles')) {
                 const style = document.createElement('style');
                 style.id = 'meeting-assistant-styles';
@@ -537,7 +522,6 @@ if (window.meetingRecorderInstance) {
                 }
             });
 
-            // اضافه کردن placeholder style
             newSpeakerInput.addEventListener('focus', () => {
                 newSpeakerInput.style.background = 'rgba(255, 255, 255, 0.2)';
             });
@@ -548,17 +532,15 @@ if (window.meetingRecorderInstance) {
         }
 
         closeAssistant() {
-            // توقف ضبط در صورت فعال بودن
+            // Stop recording if active
             if (this.isRecording) {
                 this.stopRecording();
             }
 
-            // حذف UI
             const container = document.getElementById('meeting-assistant-container');
             if (container) {
                 container.style.animation = 'slideOut 0.3s ease-in forwards';
 
-                // اضافه کردن انیمیشن خروج
                 const style = document.getElementById('meeting-assistant-styles');
                 if (style && !style.textContent.includes('slideOut')) {
                     style.textContent += `
@@ -577,14 +559,13 @@ if (window.meetingRecorderInstance) {
 
         toggleMinimize() {
             const speakerSection = document.getElementById('speaker-section');
-            const statusSection = document.getElementById('status-section'); // اضافه کردن status section
+            const statusSection = document.getElementById('status-section');
             const minimizeBtn = document.getElementById('minimize-btn');
             const container = document.getElementById('meeting-assistant-container');
 
             if (this.isMinimized) {
-                // باز کردن
                 speakerSection.style.display = 'block';
-                statusSection.style.display = 'block'; // نمایش status section
+                statusSection.style.display = 'block';
                 minimizeBtn.textContent = '−';
                 container.style.maxHeight = 'none';
                 container.style.minWidth = '320px';
@@ -592,7 +573,7 @@ if (window.meetingRecorderInstance) {
             } else {
                 // بستن
                 speakerSection.style.display = 'none';
-                statusSection.style.display = 'none'; // مخفی کردن status section
+                statusSection.style.display = 'none';
                 minimizeBtn.textContent = '+';
                 container.style.maxHeight = 'auto';
                 container.style.minWidth = '280px';
@@ -637,7 +618,7 @@ if (window.meetingRecorderInstance) {
 
             container.innerHTML = '';
 
-            // اگر شرکت‌کننده‌ای وجود ندارد، یکی اضافه کن
+            // If no participant exists, add one
             if (this.speakerNames.length === 0) {
                 this.speakerNames.push('شرکت‌کننده');
             }
@@ -670,14 +651,14 @@ if (window.meetingRecorderInstance) {
                 container.appendChild(btn);
             });
 
-            // به‌روزرسانی نام گوینده فعال
+            // Update the active speaker's name
             if (currentSpeakerName) {
-                currentSpeakerName.textContent = this.speakerNames[this.currentSpeaker] || 'شرکت‌کننده';
+                currentSpeakerName.textContent = this.speakerNames[this.currentSpeaker] || 'Participant';
             }
 
-            // به‌روزرسانی تعداد شرکت‌کنندگان
+            // Update the participant count
             if (participantCount) {
-                participantCount.textContent = `${this.speakerNames.length} نفر`;
+                participantCount.textContent = `${this.speakerNames.length} people`;
             }
         }
 
@@ -701,7 +682,6 @@ if (window.meetingRecorderInstance) {
             if (statusEl) {
                 statusEl.textContent = text;
 
-                // تغییر رنگ بر اساس نوع
                 let bgColor = 'rgba(255, 255, 255, 0.1)';
                 if (type === 'error') bgColor = 'rgba(239, 68, 68, 0.2)';
                 else if (type === 'success') bgColor = 'rgba(16, 185, 129, 0.2)';
@@ -743,13 +723,13 @@ if (window.meetingRecorderInstance) {
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
-                        sampleRate: 44100  // افزایش کیفیت صدا
+                        sampleRate: 44100  // Increase audio quality
                     }
                 });
 
                 this.mediaRecorder = new MediaRecorder(stream, {
                     mimeType: 'audio/webm;codecs=opus',
-                    audioBitsPerSecond: 128000  // افزایش کیفیت
+                    audioBitsPerSecond: 128000
                 });
                 this.audioChunks = [];
 
@@ -763,14 +743,14 @@ if (window.meetingRecorderInstance) {
                     if (this.audioChunks.length > 0) {
                         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
                         this.processAudio(audioBlob);
-                        this.audioChunks = []; // پاک کردن chunks
+                        this.audioChunks = [];
                     }
                 };
 
-                // ضبط بدون وقفه - حذف interval برای جلوگیری از قطع شدن
+                // Continuous recording - remove interval to prevent interruption
                 this.mediaRecorder.start();
 
-                // شروع Speech Recognition
+                // Start Speech Recognition
                 if (this.recognition) {
                     try {
                         this.recognition.start();
@@ -813,7 +793,7 @@ if (window.meetingRecorderInstance) {
                     }
                 }
 
-                // بستن stream
+                // Close stream
                 if (this.mediaRecorder && this.mediaRecorder.stream) {
                     this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 }
@@ -842,7 +822,6 @@ if (window.meetingRecorderInstance) {
                     '0 8px 16px rgba(16, 185, 129, 0.3)';
             }
 
-            // اضافه کردن انیمیشن pulse هنگام ضبط
             if (container) {
                 if (this.isRecording) {
                     container.classList.add('recording-pulse');
@@ -878,7 +857,7 @@ if (window.meetingRecorderInstance) {
                             this.updateTranscriptCount();
                             this.updateStatus('متن ذخیره شد ✓', 'success');
 
-                            // بازگشت به وضعیت ضبط بعد از 2 ثانیه
+                            // Return to recording state after 2 seconds
                             setTimeout(() => {
                                 if (this.isRecording) {
                                     this.updateStatus('در حال ضبط...', 'recording');
@@ -922,7 +901,7 @@ if (window.meetingRecorderInstance) {
                         this.handleServerTranscription(response.data);
                         this.updateStatus('متن از AI دریافت شد ✓', 'success');
 
-                        // بازگشت به وضعیت ضبط بعد از 3 ثانیه
+                        // Return to recording state after 3 seconds
                         setTimeout(() => {
                             if (this.isRecording) {
                                 this.updateStatus('در حال ضبط...', 'recording');
@@ -1043,7 +1022,6 @@ ${new Date().toLocaleString('fa-IR')}`;
                 container.remove();
             }
 
-            // پاک کردن styles
             const styles = document.getElementById('meeting-assistant-styles');
             if (styles) {
                 styles.remove();
@@ -1054,15 +1032,13 @@ ${new Date().toLocaleString('fa-IR')}`;
         }
     }
 
-    // تابع اصلی initialization
     function initRecorder() {
-        // چک کردن محیط
         if (!window.location.hostname.includes('meet.google.com')) {
             console.log('Not on Google Meet, skipping initialization');
             return;
         }
 
-        // چک کردن وجود Chrome APIs
+        // Check for the existence of Chrome APIs
         if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.storage) {
             console.error('Chrome extension APIs not available');
             return;
@@ -1077,7 +1053,7 @@ ${new Date().toLocaleString('fa-IR')}`;
         }
     }
 
-    // اجرای اولیه فقط یک بار
+    // Initial execution only once
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(initRecorder, 3000);
@@ -1086,7 +1062,7 @@ ${new Date().toLocaleString('fa-IR')}`;
         setTimeout(initRecorder, 2000);
     }
 
-    // cleanup در صورت تغییر صفحه
+    // Cleanup upon page change
     window.addEventListener('beforeunload', () => {
         if (window.meetingRecorderInstance) {
             window.meetingRecorderInstance.destroy();

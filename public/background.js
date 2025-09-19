@@ -3,12 +3,12 @@ chrome.runtime.onInstalled.addListener(() => {
     console.log('Meeting Assistant Extension installed');
 });
 
-// ارتباط با content script
+// Communication with content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('Message received in background:', request);
 
     if (request.action === 'transcribe') {
-        // پردازش صوت و ارسال به سرور
+        // Audio processing and sending to server
         handleTranscription(request.audioData, request.speakerCount || 2)
             .then(result => {
                 console.log('Transcription result:', result);
@@ -18,7 +18,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error('Transcription error:', error);
                 sendResponse({ success: false, error: error.message });
             });
-        return true; // برای async response
+        return true;
     }
 
     if (request.action === 'checkConnection') {
@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// تابع تبدیل base64 به blob
+// Function to convert base64 to blob
 function base64ToBlob(base64, mime = 'audio/webm') {
     try {
         const byteChars = atob(base64);
@@ -52,7 +52,7 @@ function base64ToBlob(base64, mime = 'audio/webm') {
     }
 }
 
-// تابع پردازش رونویسی
+// Function for transcription processing
 async function handleTranscription(audioBase64, speakerCount = 2) {
     try {
         console.log('Processing audio transcription...');
@@ -81,7 +81,7 @@ async function handleTranscription(audioBase64, speakerCount = 2) {
     }
 }
 
-// تابع بررسی اتصال به سرور
+// Function to check server connection
 async function checkServerConnection() {
     try {
         const response = await fetch('http://localhost:5173/api/health', {
@@ -95,7 +95,7 @@ async function checkServerConnection() {
     }
 }
 
-// تابع تولید خلاصه
+// Function to generate summary
 async function generateSummary(transcripts, speakerNames = []) {
     try {
         console.log('Generating summary...');
@@ -124,12 +124,12 @@ async function generateSummary(transcripts, speakerNames = []) {
     }
 }
 
-// مدیریت ذخیره‌سازی محلی
+// Local storage management
 chrome.storage.onChanged.addListener((changes, namespace) => {
     console.log('Storage changed:', changes, 'in', namespace);
 });
 
-// Health check endpoint برای بررسی اتصال
+// Health check endpoint for connection verification
 chrome.runtime.onConnect.addListener((port) => {
     console.log('Port connected:', port.name);
 
@@ -141,7 +141,7 @@ chrome.runtime.onConnect.addListener((port) => {
     });
 });
 
-// Alarm برای پاک کردن transcripts قدیمی (اختیاری)
+// Alarm to clear old transcripts (optional)
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'cleanOldTranscripts') {
         chrome.storage.local.get(['transcripts'], (result) => {
@@ -159,8 +159,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
-// تنظیم alarm برای پاک کردن هفتگی
+// Set alarm for weekly cleanup
 chrome.alarms.create('cleanOldTranscripts', {
-    delayInMinutes: 60 * 24, // هر 24 ساعت
-    periodInMinutes: 60 * 24 * 7 // هر هفته
+    delayInMinutes: 60 * 24, // every 24 hours
+    periodInMinutes: 60 * 24 * 7 // every week
 });
