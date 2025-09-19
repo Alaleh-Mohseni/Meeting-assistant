@@ -147,7 +147,7 @@ dist/extension/
 ├── manifest.json         # Extension configuration
 ├── background.js         # Background script for persistent functionality
 ├── content.js           # Content script for web page interaction
-├── popup.html           # Extension popup interface
+├── index-extension.html           # Extension popup interface
 ├── popup.js             # Popup functionality
 ├── assets/              # Compiled CSS and JS
 └── icons/               # Extension icons (16x16, 32x32, 128x128)
