@@ -52,8 +52,8 @@ A sophisticated voice-powered meeting assistant that provides real-time transcri
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/persian-meeting-assistant.git
-cd persian-meeting-assistant
+git clone https://github.com/Alaleh-Mohseni/Meeting-assistant.git
+cd Meeting-assistant
 ```
 
 2. **Install dependencies**
@@ -139,7 +139,7 @@ This creates a packaged extension in `dist/extension/meeting-assistant-extension
 ## 📁 Project Structure
 
 ```
-persian-meeting-assistant/
+Meeting-assistant/
 ├── backend/
 │   └── apis/
 │       ├── index.js          # API routes aggregation
