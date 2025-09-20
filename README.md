@@ -13,11 +13,13 @@ A sophisticated voice-powered meeting assistant that provides real-time transcri
 ## 🌟 Features
 
 - **Real-time Voice Transcription**: Live speech-to-text conversion in Persian using Google Cloud Speech-to-Text API
-- **Speaker Diarization**: Automatic speaker identification and management
+- **Automatic Participant Detection**: Automatically detects and adds meeting participants by scanning Google Meet interface elements
+- **Speaker Diarization**: Automatic speaker identification and management with intelligent participant mapping
 - **Intelligent Question Detection**: Automatically identifies and highlights questions during meetings
 - **AI-Powered Summaries**: Generate comprehensive meeting summaries using OpenAI GPT
-- **Multi-speaker Support**: Add, edit, and manage multiple meeting participants
-- **Export Functionality**: Download meeting transcripts and summaries
+- **Multi-speaker Support**: Add, edit, and manage multiple meeting participants with automatic detection
+- **Dynamic Participant Management**: Real-time updates when participants join or leave the meeting
+- **Export Functionality**: Download meeting transcripts and summaries with participant information
 - **Offline Fallback**: Works with browser-based speech recognition when server is unavailable
 - **Real-time Processing**: Continuous audio processing with 30-second chunks
 - **Browser Extension**: Fully functional as a Chrome/Firefox browser extension
@@ -40,6 +42,7 @@ A sophisticated voice-powered meeting assistant that provides real-time transcri
 - **Lucide Icons**: Clean and consistent iconography
 - **Tailwind CSS**: Responsive and modern styling
 - **Web APIs**: MediaRecorder, SpeechRecognition for browser-based functionality
+- **DOM Observer**: Intelligent participant detection through Google Meet interface monitoring
 
 ### Key APIs
 
@@ -174,22 +177,34 @@ The extension requests minimal permissions:
 ### Web Application Mode
 
 1. **Start Recording**: Click the microphone button to begin recording
-2. **Manage Speakers**: Add, edit, or remove meeting participants
-3. **Real-time Transcription**: View live transcription with speaker identification
-4. **Question Detection**: Questions are automatically highlighted
-5. **Generate Summary**: Create AI-powered meeting summaries
-6. **Export Data**: Download transcripts and summaries as text files
+2. **Automatic Participant Detection**: The system automatically detects meeting participants from Google Meet
+3. **Manage Speakers**: Add, edit, or remove meeting participants (auto-detected participants are included)
+4. **Real-time Transcription**: View live transcription with speaker identification
+5. **Question Detection**: Questions are automatically highlighted
+6. **Generate Summary**: Create AI-powered meeting summaries
+7. **Export Data**: Download transcripts and summaries as text files
 
 ### Browser Extension Mode
 
 1. **Click Extension Icon**: Open the meeting assistant popup
 2. **Grant Permissions**: Allow microphone access when prompted
-3. **Start Meeting**: Begin recording directly from the popup
-4. **Minimal Interface**: Streamlined UI optimized for extension usage
-5. **Background Processing**: Meeting continues recording even when popup is closed
-6. **Quick Access**: Instant access from any webpage
+3. **Automatic Detection**: Extension automatically detects Google Meet participants
+4. **Start Meeting**: Begin recording directly from the popup
+5. **Minimal Interface**: Streamlined UI optimized for extension usage
+6. **Background Processing**: Meeting continues recording even when popup is closed
+7. **Quick Access**: Instant access from any webpage
 
 ## 🔧 Configuration
+
+### Participant Detection
+
+The system automatically detects meeting participants using multiple DOM selectors:
+
+- **User Detection**: Self-identification from `[data-self-name]` attributes
+- **Participant Elements**: Detection from `[data-participant-id]` and related selectors
+- **Name Extraction**: Clean extraction of participant names with filtering
+- **Dynamic Updates**: Real-time monitoring for participant changes
+- **Fallback Names**: Default participant names when detection fails
 
 ### Audio Settings
 
@@ -200,9 +215,10 @@ The extension requests minimal permissions:
 
 ### Speaker Diarization
 
-- **Default Speakers**: 2 (configurable)
+- **Default Speakers**: Auto-detected from meeting (minimum 2)
 - **Maximum Speakers**: Unlimited
-- **Speaker Labels**: Customizable names
+- **Speaker Labels**: Automatically mapped to detected participant names
+- **Manual Override**: Users can add additional speakers manually
 
 ### Question Detection Patterns
 
@@ -238,7 +254,7 @@ Meeting-assistant/
 ├── public/
 │   ├── manifest.json        # Browser extension manifest
 │   ├── background.js        # Extension background script
-│   ├── content.js          # Extension content script
+│   ├── content.js          # Extension content script (includes participant detection)
 │   └── icons/              # Extension icons
 ├── docker-compose.yml       # Docker configuration
 ├── vite.config.js          # Vite configuration with extension mode
@@ -257,7 +273,7 @@ Content-Type: multipart/form-data
 
 Parameters:
 - audio: Audio file (WebM/WAV/MP3)
-- speakerCount: Number of speakers (default: 2)
+- speakerCount: Number of speakers (auto-detected or specified)
 ```
 
 ### Summary Generation
@@ -268,7 +284,7 @@ Content-Type: application/json
 
 {
   "transcript": [...],
-  "speakerNames": [...]
+  "speakerNames": [...] // Includes auto-detected participant names
 }
 ```
 
@@ -312,6 +328,32 @@ npm run dev:extension
    - Load the unpacked extension from `dist/extension`
    - Changes will be reflected after reloading the extension
 
+## 🧠 Participant Detection Technology
+
+### Detection Methods
+
+The system uses advanced DOM scanning techniques to identify meeting participants:
+
+**Primary Selectors:**
+
+- `[data-self-name]` - User's own name
+- `[data-participant-id]` - Participant identifiers
+- `.zWGUib` - Google Meet participant name elements
+- `[jsname="xvfV4b"]` - Name container elements
+
+**Advanced Detection:**
+
+- **Name Cleaning**: Removes parenthetical information and extra content
+- **Duplicate Prevention**: Ensures unique participant names
+- **Length Validation**: Filters realistic name lengths (1-50 characters)
+- **Real-time Updates**: Monitors DOM changes for participant additions/removals
+
+**Fallback Handling:**
+
+- Default participant names when detection fails
+- Manual participant addition capability
+- Graceful degradation for unsupported Meeting interfaces
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -327,6 +369,7 @@ npm run dev:extension
 - Test with various Persian accents and dialects
 - Ensure mobile responsiveness
 - Test both web app and extension modes
+- Test participant detection with different Meeting configurations
 - Follow extension store guidelines for submissions
 
 ## 📊 Performance
@@ -336,6 +379,7 @@ npm run dev:extension
 - **Memory Usage**: Efficient with chunked processing
 - **Bundle Size**: Preact keeps bundle size under 150KB
 - **Extension Performance**: Minimal background resource usage
+- **Participant Detection**: Lightweight DOM monitoring with minimal performance impact
 - **Offline Capability**: Browser-based fallback when server unavailable
 
 ## 🔐 Security
@@ -346,6 +390,7 @@ npm run dev:extension
 - CORS protection for cross-origin requests
 - Extension permissions follow principle of least privilege
 - No sensitive data stored in extension local storage
+- Participant names are processed locally and not transmitted unnecessarily
 
 ## 🐛 Troubleshooting
 
@@ -356,6 +401,13 @@ npm run dev:extension
 - Ensure browser microphone permissions are granted
 - Check HTTPS requirement for audio access
 - In extension: grant microphone permission in popup
+
+**Participant Detection Not Working**
+
+- Ensure you're using the extension on Google Meet pages
+- Check that Meeting interface has loaded completely
+- Verify participants are visible in the Meeting interface
+- Try refreshing the page if detection seems incomplete
 
 **Transcription Not Working**
 
@@ -411,6 +463,14 @@ npm run dev:extension
 - ✅ Opera
 - ⚠️ Safari (requires conversion to Safari Web Extension)
 
+### Google Meet Integration
+
+- ✅ Standard Google Meet interface
+- ✅ Grid view and spotlight view
+- ✅ Multiple participants support
+- ✅ Real-time participant changes
+- ⚠️ Some custom Meeting themes may affect detection
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -422,6 +482,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Preact team for the lightweight React alternative
 - Persian NLP community for language processing insights
 - Browser extension development community
+- Google Meet for providing accessible DOM structure for participant detection
 
 ## 📞 Support
 
